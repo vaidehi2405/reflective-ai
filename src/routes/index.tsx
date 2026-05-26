@@ -115,33 +115,6 @@ function ReflectiveApp() {
     setTypingDemo(false);
   };
 
-  const closeTutorial = () => {
-    setTutorialOpen(false);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("reflective-onboarding-seen", "1");
-    }
-  };
-
-  const restartTutorial = () => {
-    setMode("reflective");
-    reset();
-    setTutorialStep(0);
-    setTutorialOpen(true);
-  };
-
-  const handleSuggestedClick = async () => {
-    if (typingDemo) return;
-    const text = samplePrompt;
-    setTypingDemo(true);
-    setInput("");
-    for (let i = 1; i <= text.length; i++) {
-      await new Promise((r) => setTimeout(r, 12));
-      setInput(text.slice(0, i));
-    }
-    setTypingDemo(false);
-    setTutorialStep(2);
-    submit();
-  };
 
   const samplePrompt =
     "Should I leave my stable PM job for an early-stage AI startup?";
@@ -251,27 +224,6 @@ function ReflectiveApp() {
   );
 }
 
-function TutorialOverlay({ step, activeTarget, onNext, onBack, onSkip, onFinish }: { step: TutorialStep; activeTarget: string; onNext: () => void; onBack: () => void; onSkip: () => void; onFinish: () => void; }) {
-  const steps = {
-    0: "Reflective Mode helps you inspect assumptions, tradeoffs, and alternative perspectives before acting on AI outputs.",
-    1: "Try asking a high-stakes or nuanced question.",
-    2: "Before answering, the AI clarifies assumptions shaping the response.",
-    3: "See how the answer changes under different assumptions or viewpoints.",
-    4: "For important decisions, the system also suggests what’s worth validating before acting.",
-  } as const;
-
-  return <div className="absolute inset-0 z-50">
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-black/50" />
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="absolute bottom-28 left-1/2 z-50 w-[min(92vw,440px)] -translate-x-1/2 rounded-2xl border border-white/20 bg-background/95 p-4 shadow-2xl backdrop-blur">
-      <p className="text-sm leading-6 text-foreground/90">{steps[step]}</p>
-      <div className="mt-3 flex items-center justify-between"><span className="text-xs text-muted-foreground">{step + 1} of 5</span><div className="flex gap-2">{step > 0 && <button onClick={onBack} className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted">Back</button>}<button onClick={onSkip} className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted">Skip tutorial</button>{step === 4 ? <button onClick={onFinish} className="rounded-lg bg-foreground px-3 py-1.5 text-xs text-background">Finish</button> : <button onClick={onNext} disabled={step > 1} className="rounded-lg bg-foreground px-3 py-1.5 text-xs text-background disabled:opacity-40">Next</button>}</div></div>
-    </motion.div>
-    <div className="pointer-events-none absolute inset-0">
-      <div className="h-full w-full [mask-image:linear-gradient(black,black)]" />
-    </div>
-    <style>{`[data-tutorial]{position:relative;z-index:1}[data-tutorial="${activeTarget}"]{z-index:60;box-shadow:0 0 0 2px color-mix(in oklch, var(--color-reflective) 45%, transparent),0 0 0 12px rgba(255,255,255,0.04);border-radius:14px}`}</style>
-  </div>;
-}
 
 
 const tutorialSteps = [
