@@ -70,10 +70,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Reflective Mode" },
-      {
-        name: "description",
-        content: "An AI assistant that helps you think — not one that thinks for you.",
-      },
+     
       { property: "og:title", content: "Reflective Mode" },
       { name: "twitter:title", content: "Reflective Mode" },
       { name: "description", content: "Reflective AI is a frontend prototype for an AI assistant that aids users in evaluating AI-generated outputs." },
