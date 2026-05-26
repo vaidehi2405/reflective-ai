@@ -38,7 +38,30 @@ function ReflectiveApp() {
   const [turn, setTurn] = useState<Turn | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [streamDone, setStreamDone] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
+  const [typingDemo, setTypingDemo] = useState(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+
+
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const seen = window.localStorage.getItem("reflective-onboarding-seen") === "1";
+    if (!seen) {
+      setTutorialOpen(true);
+      setTutorialStep(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!tutorialOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setTutorialOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tutorialOpen]);
 
   const questionsComplete = useMemo(
     () => reflectiveQuestions.every((q) => answers[q.id]),
@@ -78,6 +101,34 @@ function ReflectiveApp() {
     setInput("");
   };
 
+  const closeTutorial = () => {
+    setTutorialOpen(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("reflective-onboarding-seen", "1");
+    }
+  };
+
+  const restartTutorial = () => {
+    setMode("reflective");
+    reset();
+    setTutorialStep(0);
+    setTutorialOpen(true);
+  };
+
+  const handleSuggestedClick = async () => {
+    if (typingDemo) return;
+    const text = samplePrompt;
+    setTypingDemo(true);
+    setInput("");
+    for (let i = 1; i <= text.length; i++) {
+      await new Promise((r) => setTimeout(r, 12));
+      setInput(text.slice(0, i));
+    }
+    setTypingDemo(false);
+    setTutorialStep(2);
+    submit();
+  };
+
   const samplePrompt =
     "Should I leave my stable PM job for an early-stage AI startup?";
 
@@ -97,7 +148,8 @@ function ReflectiveApp() {
             <ChevronDown className="h-4 w-4 text-muted-foreground" />
           </button>
           <div className="flex items-center gap-2">
-            <ModeToggle value={mode} onChange={setMode} />
+            <div data-tutorial="mode"><ModeToggle value={mode} onChange={setMode} /></div>
+            <button onClick={restartTutorial} className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted">Tutorial</button>
             <ThemeToggle />
           </div>
         </header>
@@ -114,7 +166,7 @@ function ReflectiveApp() {
                 {/* Reflective questions */}
                 {turn.reflective && (phase === "questions" || phase === "generating" || phase === "answer") && (
                   <AssistantBlock>
-                    <ReflectiveQuestions
+                    <div data-tutorial="questions"><ReflectiveQuestions
                       answers={answers}
                       onAnswer={(qid, opt) =>
                         setAnswers((s) => ({ ...s, [qid]: opt }))
@@ -122,6 +174,7 @@ function ReflectiveApp() {
                       onContinue={startGeneration}
                       complete={questionsComplete && phase === "questions"}
                     />
+                    </div>
                   </AssistantBlock>
                 )}
 
@@ -159,7 +212,7 @@ function ReflectiveApp() {
                 {phase === "answer" && (
                   <AssistantBlock>
                     <StreamingAnswer fullText={mockAnswer} onDone={() => setStreamDone(true)} />
-                    {turn.reflective && streamDone && <PostSections />}
+                    {turn.reflective && streamDone && <div data-tutorial="perspectives checklist"><PostSections /></div>}
                     {streamDone && (
                       <motion.p
                         initial={{ opacity: 0 }}
@@ -181,6 +234,7 @@ function ReflectiveApp() {
         <div className="pointer-events-none absolute inset-x-0 bottom-0">
           <div className="pointer-events-auto mx-auto w-full max-w-3xl px-4 pb-5 sm:px-6">
             <div className="rounded-[28px] bg-gradient-to-t from-background via-background/95 to-transparent pt-6">
+              <div data-tutorial="prompt">
               <PromptInput
                 value={input}
                 onChange={setInput}
@@ -191,7 +245,11 @@ function ReflectiveApp() {
                     ? "Ask something worth thinking about…"
                     : "Ask anything"
                 }
+                suggestedPrompt="Try: Should I leave my stable PM job for an early-stage AI startup?"
+                showSuggestedPrompt={tutorialOpen && tutorialStep === 1 && mode === "reflective" && !turn}
+                onSuggestedClick={handleSuggestedClick}
               />
+              </div>
               <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
                 {mode === "reflective" && (
                   <Sparkles className="h-3 w-3 text-reflective" />
@@ -205,6 +263,15 @@ function ReflectiveApp() {
             </div>
           </div>
         </div>
+      {tutorialOpen && (
+        <TutorialOverlay
+          step={tutorialStep}
+          onNext={() => setTutorialStep((n) => Math.min(n + 1, 4))}
+          onBack={() => setTutorialStep((n) => Math.max(n - 1, 0))}
+          onSkip={closeTutorial}
+          onFinish={closeTutorial}
+        />
+      )}
       </main>
     </div>
   );
@@ -300,6 +367,35 @@ function EmptyState({ sample, onPick }: { sample: string; onPick: (p: string) =>
           </motion.button>
         ))}
       </div>
+    </div>
+  );
+}
+
+
+const tutorialSteps = [
+  { key: "mode", text: "Reflective Mode is designed for higher-stakes decisions where assumptions, tradeoffs, and uncertainty matter." },
+  { key: "prompt", text: "Try starting with a complex or important question. Reflective Mode works best when decisions involve ambiguity or tradeoffs." },
+  { key: "questions", text: "Before answering, the AI clarifies the assumptions shaping the response — helping prevent hidden framing or generic advice." },
+  { key: "perspectives", text: "Instead of presenting one ‘correct’ answer, Reflective Mode shows how conclusions change under different assumptions and viewpoints." },
+  { key: "checklist", text: "For higher-stakes decisions, the system also surfaces what’s worth validating before acting." },
+] as const;
+
+function TutorialOverlay({ step, onNext, onBack, onSkip, onFinish }: { step: number; onNext: () => void; onBack: () => void; onSkip: () => void; onFinish: () => void }) {
+  const current = tutorialSteps[step];
+  return (
+    <div className="pointer-events-none absolute inset-0 z-50">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-black/45" />
+      <motion.div initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="pointer-events-auto absolute bottom-32 left-1/2 w-[min(92vw,420px)] -translate-x-1/2 rounded-2xl border border-white/20 bg-background/95 p-4 shadow-2xl backdrop-blur">
+        <p className="text-sm leading-6 text-foreground/90">{current.text}</p>
+        <div className="mt-3 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">{step + 1} of {tutorialSteps.length}</span>
+          <div className="flex items-center gap-2">
+            {step > 0 && <button onClick={onBack} className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted">Back</button>}
+            <button onClick={onSkip} className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted">Skip tutorial</button>
+            <button onClick={step === tutorialSteps.length - 1 ? onFinish : onNext} className="rounded-lg bg-foreground px-3 py-1.5 text-xs text-background">{step === tutorialSteps.length - 1 ? "Finish" : "Next"}</button>
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 }
