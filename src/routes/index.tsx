@@ -112,12 +112,9 @@ function ReflectiveApp() {
     setTypingDemo(false);
   };
 
-  const currentTarget: TutorialTarget =
-    tutorialStep === 0 ? "mode" :
-    tutorialStep === 1 ? "prompt" :
-    tutorialStep === 2 ? "questions" :
-    tutorialStep === 3 ? "perspectives" :
-    tutorialStep === 4 ? "checklist" : null;
+
+  const samplePrompt =
+    "Should I leave my stable PM job for an early-stage AI startup?";
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
@@ -203,6 +200,8 @@ function ReflectiveApp() {
     </div>
   );
 }
+
+
 
 const tutorialSteps = [
   "Reflective Mode helps you inspect assumptions and tradeoffs before acting.",
