@@ -27,16 +27,16 @@ function ReflectiveApp() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [streamDone, setStreamDone] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
-  const [tutorialStep, setTutorialStep] = useState<TutorialStep>(0);
+  const [tutorialStep, setTutorialStep] = useState(0);
   const [typingDemo, setTypingDemo] = useState(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
-  const samplePrompt = "Should I leave my stable PM job for an early-stage AI startup?";
-  const questionsComplete = useMemo(() => reflectiveQuestions.every((q) => answers[q.id]), [answers]);
+
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (window.localStorage.getItem("reflective-onboarding-seen") !== "1") {
+    const seen = window.localStorage.getItem("reflective-onboarding-seen") === "1";
+    if (!seen) {
       setTutorialOpen(true);
       setTutorialStep(0);
     }
@@ -45,11 +45,16 @@ function ReflectiveApp() {
   useEffect(() => {
     if (!tutorialOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeTutorial();
+      if (e.key === "Escape") setTutorialOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [tutorialOpen]);
+
+  const questionsComplete = useMemo(
+    () => reflectiveQuestions.every((q) => answers[q.id]),
+    [answers],
+  );
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -110,7 +115,36 @@ function ReflectiveApp() {
     setTypingDemo(false);
   };
 
-  const activeTarget = tutorialStep === 0 ? "mode" : tutorialStep === 1 ? "prompt" : tutorialStep === 2 ? "questions" : tutorialStep === 3 ? "perspectives" : "checklist";
+  const closeTutorial = () => {
+    setTutorialOpen(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("reflective-onboarding-seen", "1");
+    }
+  };
+
+  const restartTutorial = () => {
+    setMode("reflective");
+    reset();
+    setTutorialStep(0);
+    setTutorialOpen(true);
+  };
+
+  const handleSuggestedClick = async () => {
+    if (typingDemo) return;
+    const text = samplePrompt;
+    setTypingDemo(true);
+    setInput("");
+    for (let i = 1; i <= text.length; i++) {
+      await new Promise((r) => setTimeout(r, 12));
+      setInput(text.slice(0, i));
+    }
+    setTypingDemo(false);
+    setTutorialStep(2);
+    submit();
+  };
+
+  const samplePrompt =
+    "Should I leave my stable PM job for an early-stage AI startup?";
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
@@ -138,14 +172,32 @@ function ReflectiveApp() {
                 <UserBubble msg={turn} />
                 {turn.reflective && (phase === "questions" || phase === "generating" || phase === "answer") && (
                   <AssistantBlock>
-                    <div data-tutorial="questions"><ReflectiveQuestions answers={answers} onAnswer={(qid, opt) => setAnswers((s) => ({ ...s, [qid]: opt }))} onContinue={startGeneration} complete={questionsComplete && phase === "questions"} /></div>
+                    <div data-tutorial="questions"><ReflectiveQuestions
+                      answers={answers}
+                      onAnswer={(qid, opt) =>
+                        setAnswers((s) => ({ ...s, [qid]: opt }))
+                      }
+                      onContinue={startGeneration}
+                      complete={questionsComplete && phase === "questions"}
+                    />
+                    </div>
                   </AssistantBlock>
                 )}
                 <AnimatePresence>{phase === "generating" && <motion.div key="gen" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><AssistantBlock><div className="flex items-center gap-3 text-muted-foreground"><span className="dot-pulse"><span /><span /><span /></span><span className="text-sm">Thinking with your framings…</span></div></AssistantBlock></motion.div>}</AnimatePresence>
                 {phase === "answer" && (
                   <AssistantBlock>
-                    <StreamingAnswer fullText={mockAnswer} onDone={() => { setStreamDone(true); if (tutorialOpen && tutorialStep <= 3) setTutorialStep(3); }} />
-                    {turn.reflective && streamDone && <PostSections onChecklistOpen={() => tutorialOpen && tutorialStep === 3 && setTutorialStep(4)} />}
+                    <StreamingAnswer fullText={mockAnswer} onDone={() => setStreamDone(true)} />
+                    {turn.reflective && streamDone && <div data-tutorial="perspectives checklist"><PostSections /></div>}
+                    {streamDone && (
+                      <motion.p
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.4 }}
+                        className="mt-6 text-xs text-muted-foreground"
+                      >
+                        Reflective mode keeps reasoning inspectable. You stay the decider.
+                      </motion.p>
+                    )}
                   </AssistantBlock>
                 )}
               </div>
@@ -156,12 +208,44 @@ function ReflectiveApp() {
         <div className="pointer-events-none absolute inset-x-0 bottom-0">
           <div className="pointer-events-auto mx-auto w-full max-w-3xl px-4 pb-5 sm:px-6">
             <div className="rounded-[28px] bg-gradient-to-t from-background via-background/95 to-transparent pt-6">
-              <div data-tutorial="prompt"><PromptInput value={input} onChange={setInput} onSubmit={submit} disabled={phase === "generating"} placeholder={mode === "reflective" ? "Ask something worth thinking about…" : "Ask anything"} suggestedPrompt={mode === "reflective" ? samplePrompt : undefined} showSuggestedPrompt={mode === "reflective" && !input} onSuggestedClick={handleSuggestedClick} /></div>
+              <div data-tutorial="prompt">
+              <PromptInput
+                value={input}
+                onChange={setInput}
+                onSubmit={submit}
+                disabled={phase === "generating"}
+                placeholder={
+                  mode === "reflective"
+                    ? "Ask something worth thinking about…"
+                    : "Ask anything"
+                }
+                suggestedPrompt="Try: Should I leave my stable PM job for an early-stage AI startup?"
+                showSuggestedPrompt={tutorialOpen && tutorialStep === 1 && mode === "reflective" && !turn}
+                onSuggestedClick={handleSuggestedClick}
+              />
+              </div>
+              <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
+                {mode === "reflective" && (
+                  <Sparkles className="h-3 w-3 text-reflective" />
+                )}
+                <span>
+                  {mode === "reflective"
+                    ? "Reflective Mode is on — the assistant will surface assumptions before answering."
+                    : "Reflective Mode is off."}
+                </span>
+              </div>
             </div>
           </div>
         </div>
-
-        {tutorialOpen && <TutorialOverlay step={tutorialStep} activeTarget={activeTarget} onSkip={closeTutorial} onBack={() => setTutorialStep((s) => (s > 0 ? ((s - 1) as TutorialStep) : s))} onNext={() => { if (tutorialStep < 2) setTutorialStep((tutorialStep + 1) as TutorialStep); }} onFinish={closeTutorial} />}
+      {tutorialOpen && (
+        <TutorialOverlay
+          step={tutorialStep}
+          onNext={() => setTutorialStep((n) => Math.min(n + 1, 4))}
+          onBack={() => setTutorialStep((n) => Math.max(n - 1, 0))}
+          onSkip={closeTutorial}
+          onFinish={closeTutorial}
+        />
+      )}
       </main>
     </div>
   );
@@ -189,5 +273,31 @@ function TutorialOverlay({ step, activeTarget, onNext, onBack, onSkip, onFinish 
   </div>;
 }
 
-function AssistantBlock({ children }: { children: React.ReactNode }) { return <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="flex gap-4"><div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background"><Sparkles className="h-3.5 w-3.5" /></div><div className="min-w-0 flex-1">{children}</div></motion.div>; }
-function UserBubble({ msg }: { msg: UserMsg }) { return <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="flex justify-end"><div className="max-w-[85%] rounded-3xl rounded-tr-md bg-muted px-4 py-3 text-[15px] leading-7 text-foreground">{msg.reflective && <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-reflective-soft px-2 py-0.5 text-[10.5px] font-medium text-reflective"><Sparkles className="h-2.5 w-2.5" /> Reflective</div>}<div>{msg.text}</div></div></motion.div>; }
+
+const tutorialSteps = [
+  { key: "mode", text: "Reflective Mode is designed for higher-stakes decisions where assumptions, tradeoffs, and uncertainty matter." },
+  { key: "prompt", text: "Try starting with a complex or important question. Reflective Mode works best when decisions involve ambiguity or tradeoffs." },
+  { key: "questions", text: "Before answering, the AI clarifies the assumptions shaping the response — helping prevent hidden framing or generic advice." },
+  { key: "perspectives", text: "Instead of presenting one ‘correct’ answer, Reflective Mode shows how conclusions change under different assumptions and viewpoints." },
+  { key: "checklist", text: "For higher-stakes decisions, the system also surfaces what’s worth validating before acting." },
+] as const;
+
+function TutorialOverlay({ step, onNext, onBack, onSkip, onFinish }: { step: number; onNext: () => void; onBack: () => void; onSkip: () => void; onFinish: () => void }) {
+  const current = tutorialSteps[step];
+  return (
+    <div className="pointer-events-none absolute inset-0 z-50">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-black/45" />
+      <motion.div initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="pointer-events-auto absolute bottom-32 left-1/2 w-[min(92vw,420px)] -translate-x-1/2 rounded-2xl border border-white/20 bg-background/95 p-4 shadow-2xl backdrop-blur">
+        <p className="text-sm leading-6 text-foreground/90">{current.text}</p>
+        <div className="mt-3 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">{step + 1} of {tutorialSteps.length}</span>
+          <div className="flex items-center gap-2">
+            {step > 0 && <button onClick={onBack} className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted">Back</button>}
+            <button onClick={onSkip} className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted">Skip tutorial</button>
+            <button onClick={step === tutorialSteps.length - 1 ? onFinish : onNext} className="rounded-lg bg-foreground px-3 py-1.5 text-xs text-background">{step === tutorialSteps.length - 1 ? "Finish" : "Next"}</button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
